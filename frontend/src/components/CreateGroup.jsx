@@ -40,7 +40,6 @@ export default function CreateGroup({ onCancel, onCreate, existingUsers }) {
             placeholder="Nombre del grupo"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            required
           />
           <div className="group-members-list">
             {existingUsers.length === 0 && <p className="muted">No hay otros usuarios para añadir.</p>}

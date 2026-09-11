@@ -1,0 +1,170 @@
+===========================================================================
+PLAN DEL PROYECTO: CHAT EN TIEMPO REAL (Chat-Tiempo-Real)
+===========================================================================
+Autor: Eduard Alejandro Vega Diaz  |  Nivel: Backend Developer
+
+---------------------------------------------------------------------------
+1. QUE VAMOS A CONSTRUIR
+---------------------------------------------------------------------------
+Una aplicacion web de mensajeria en tiempo real tipo WhatsApp/Discord:
+
+- Registro e inicio de sesion con JWT (access token).
+- Chats directos (1 a 1) entre usuarios.
+- Creacion de salas/grupos con varios miembros.
+- Mensajes en tiempo real (llegan sin recargar la pagina, <1s).
+- Estado en linea / desconectado de cada usuario (presencia).
+- Indicador de "escribiendo..." (typing).
+- Historial de mensajes guardado en base de datos.
+
+---------------------------------------------------------------------------
+2. ARQUITECTURA (monorepo, igual que tus proyectos previos)
+---------------------------------------------------------------------------
+Chat-Tiempo-Real/
+├── backend/                       # API REST + Socket.io
+│   └── src/
+│       ├── config/                # Conexion a la base de datos
+│       ├── models/                # Modelos (User, Conversation, Message)
+│       ├── controllers/           # Logica de auth, chats, mensajes
+│       ├── middleware/            # Auth JWT, manejo de errores
+│       ├── routes/                # Definicion de endpoints REST
+│       └── sockets/               # Eventos Socket.io (tiempo real)
+└── frontend/                      # Interfaz de usuario
+    └── src/
+        ├── components/            # Login, Sidebar, ChatWindow, etc.
+        ├── context/               # Contexto de autenticacion
+        ├── api/                   # Cliente HTTP (axios) + socket client
+        └── styles                 # CSS
+
+---------------------------------------------------------------------------
+3. POR QUE CADA TECNOLOGIA (justificacion)
+---------------------------------------------------------------------------
+BACKEND
+-------
+Node.js ..............................
+- Es el lenguaje que dominas en tus 3 proyectos previos.
+- Un solo lenguaje en frontend y backend = la bas tecnologica es la misma.
+- Ideal para IO intensiva: muchas conexiones de chat simultaneas.
+
+Express ................................
+- Framework REST estandar de Node, minimalista y con MUCHO material
+  de referencia en entrevistas y en la industria.
+- Factoriza rutas, middleware y validaciones igual que en tu
+  e-commerce y URL shortener (ya lo conoces).
+
+Socket.io ...............................
+- Es la biblioteca de tiempo real mas usada: maneja reconexion
+  automatica, salas (rooms) y broadcast de forma simple.
+- Functionalidad tipo chat NO se puede hacer solo con HTTP/REST:
+  necesitas WebSockets (conexion persistente bidireccional).
+- Soporta "fallback" a HTTP long-polling si el firewall bloquea
+  WebSockets (muy util en el despliegue).
+
+PostgreSQL (Neon) + Sequelize ...........
+- PostgreSQL: base SQL robusta que ya usas (e-commerce/Audioly).
+  Los mensajes y conversaciones SON datos relacionales (muchos-a-muchos).
+- Sequelize: el ORM que ya usaste en Audioly; evita escribir SQL
+  manual y define los modelos en JS.
+
+JWT (jsonwebtoken) + bcryptjs ............
+- JWT: autenticacion stateless (mismo patron que tus otros proyectos);
+  el token viaja en el header y tambien se usa para autenticar el
+  socket en el handshake.
+- bcryptjs: hash seguro de contrasenas.
+
+cors + dotenv .............................
+- CORS: permitir que el frontend (otro dominio/puerto) consuma la API.
+- dotenv: manejo de variables de entorno (URL de la BD, JWT secret).
+
+FRONTEND
+--------
+React 19 + Vite ............................
+- React: el framework frontend que ya usas (React 19 en e-commerce).
+- Vite: build ultrarrápido y erronevred cofiguracion sencilla
+  (en e-commerce ya lo usas).
+
+socket.io-client ............................
+- El cliente oficial de Socket.io que mantiene la conexion en tiempo
+  real desde el navegador (misma version que el servidor).
+
+axios .......................................
+- Cliente HTTP para las llamadas REST (login, cargar conversaciones,
+  historial). Consistente con tu e-commerce.
+
+CSS propio (sin framework de estilos) .......
+- Un chat se ve bien con CSS puro moderno (dark theme tipo mensajero)
+  y evitamos peso/incompatibilidad de Tailwind en esta app.
+
+DESPLIEGUE
+----------
+Render + Neon (gratis) ......................
+- Render: backend como Web Service (Node) y frontend como Static Site.
+  Soporta WebSockets en el plan gratuito.
+- Neon: PostgreSQL ya disponible en tu cuenta; creamos una BD "chat".
+- Github Actions: (opcional) CI/CD como en el URL shortener.
+
+---------------------------------------------------------------------------
+4. MODELO DE DATOS (tablas)
+---------------------------------------------------------------------------
+users
+  id (UUID) | username | email | passwordHash | online | lastSeen
+
+conversations
+  id (UUID) | type ('direct' | 'group') | name (solo grupos) | createdAt
+
+conversation_participants  (tabla intermedia n-a-n)
+  id | userId | conversationId
+
+messages
+  id (UUID) | conversationId | userId | content | createdAt
+
+---------------------------------------------------------------------------
+5. ENDPOINTS REST (API)
+---------------------------------------------------------------------------
+POST   /api/auth/register        -> crear cuenta (devuelve token)
+POST   /api/auth/login           -> iniciar sesion (devuelve token)
+GET    /api/auth/me              -> datos del usuario actual
+GET    /api/users/search?q=      -> buscar usuarios para iniciar DM
+GET    /api/conversations        -> lista de chats (ultimo mensaje + presencia)
+POST   /api/conversations/direct { userId }           -> obtener/crear DM
+POST   /api/conversations/group  { name, userIds[] }  -> crear grupo
+GET    /api/conversations/:id/messages   -> historial paginado
+POST   /api/conversations/:id/messages   -> enviar mensaje (fallback HTTP)
+
+---------------------------------------------------------------------------
+6. EVENTOS SOCKET.IO (tiempo real)
+---------------------------------------------------------------------------
+conversation:join   -> cuando un usuario abre un chat
+message:send        -> { conversationId, content } envia y guarda mensaje
+message:new         -> servidor -> clientes: mensaje nuevo
+typing              -> notifica "escribiendo..."
+presence:update     -> servidor -> clientes: usuario se conecto/desconecto
+
+EL FLUJO CLAVE:
+1. Usuario A envia "message:send".
+2. El servidor GUARDA el mensaje en PostgreSQL.
+3. El servidor emite "message:new" a todos los participantes.
+4. Los chats se actualizan SOLOS en tiempo real (sin recargar).
+
+---------------------------------------------------------------------------
+7. CRONOGRAMA DE IMPLEMENTACION
+---------------------------------------------------------------------------
+Fase 1 - Backend base      : modelos + auth JWT + rutas REST
+Fase 2 - Tiempo real       : Socket.io (mensajes, presencia, typing)
+Fase 3 - DB + seed         : crear BD "chat" en Neon, sync + usuarios demo
+Fase 4 - Frontend auth     : login y registro conectados a la API
+Fase 5 - Frontend chat     : lista de chats, ventana, DM y grupos en vivo
+Fase 6 - Pruebas locales   : 2 ventanas/usuarios enviando mensajes
+Fase 7 - Repositorio       : commit + push a GitHub
+Fase 8 - Despliegue        : backend y frontend en Render + Neon
+Fase 9 - Portafolio        : enlace "Demo en vivo" del chat
+
+---------------------------------------------------------------------------
+8. CUALIDADES QUE ESTE PROYECTO DEMUESTRA
+---------------------------------------------------------------------------
+- Arquitectura cliente-servidor con APIs REST + WebSockets.
+- Modelado de datos relacionales n-a-n (conversaciones) y transacciones.
+- Autenticacion segura con JWT y hashing.
+- Estado en tiempo real y eventos asincronos.
+- Despliegue profesional en la nube (Render + Neon).
+- Es el proyecto PERFECTO para mencionar en entrevistas backend:
+  muestra que entiendes WebSockets, sockets, presence y concurrencia.

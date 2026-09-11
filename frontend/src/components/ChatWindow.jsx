@@ -85,7 +85,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
 
   if (m.deleted) {
     return (
-      <div key={m.id} className={`msg ${mine ? 'mine' : ''} ${fresh ? 'new-arrival' : ''}`}>
+      <div className={`msg ${mine ? 'mine' : ''} ${fresh ? 'new-arrival' : ''}`}>
         {!mine && <div className="avatar avatar-tiny" style={avatarStyle(m.sender)}>{m.sender?.username[0]?.toUpperCase()}</div>}
         <div className="msg-bubble deleted">
           <span className="msg-deleted-text">🗑 Este mensaje fue eliminado</span>
@@ -97,7 +97,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
 
   if (editing) {
     return (
-      <div key={m.id} className={`msg ${mine ? 'mine' : ''}`}>
+      <div className={`msg ${mine ? 'mine' : ''}`}>
         <div className="msg-bubble editing">
           <input className="edit-input" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
           <div className="edit-actions">
@@ -110,7 +110,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
   }
 
   return (
-    <div key={m.id} ref={wrapperRef} className={`msg ${mine ? 'mine' : ''} ${fresh ? 'new-arrival' : ''}`}>
+    <div ref={wrapperRef} className={`msg ${mine ? 'mine' : ''} ${fresh ? 'new-arrival' : ''}`}>
       {!mine && <div className="avatar avatar-tiny" style={avatarStyle(m.sender)}>{m.sender?.username[0]?.toUpperCase()}</div>}
       <div className="msg-bubble" onDoubleClick={openPicker}>
         {m.replyTo && (
@@ -158,7 +158,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
   );
 }
 
-function MembersModal({ conversation, currentUser, onClose, onRename, onDelete }) {
+function MembersModal({ conversation, currentUser, onClose, onRename, onDelete, onLeave }) {
   const [members, setMembers] = useState(null);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.name || '');
@@ -206,7 +206,7 @@ function MembersModal({ conversation, currentUser, onClose, onRename, onDelete }
             <button type="button" className="delete-group-btn" onClick={() => { onClose(); onDelete(); }}>🗑 Eliminar grupo</button>
           </>
         )}
-        <button type="button" className="leave-btn" onClick={() => { onClose(); }}>Salir del grupo</button>
+        <button type="button" className="leave-btn" onClick={() => { onClose(); if (window.confirm('¿Salir del grupo?')) onLeave(); }}>Salir del grupo</button>
       </div>
     </div>
   );
@@ -348,7 +348,7 @@ export default function ChatWindow({
       </div>
 
       {conversation.type === 'group' && showMembers && (
-        <MembersModal conversation={conversation} currentUser={currentUser} onClose={() => setShowMembers(false)} onRename={onRenameGroup} onDelete={onDeleteGroup} />
+        <MembersModal conversation={conversation} currentUser={currentUser} onClose={() => setShowMembers(false)} onRename={onRenameGroup} onDelete={onDeleteGroup} onLeave={onLeaveGroup} />
       )}
 
       {conversation.type === 'group' && (
@@ -373,7 +373,7 @@ export default function ChatWindow({
             <button type="button" className="preview-close" onClick={() => { setImagePreview(null); setFilePreview(null); if (fileRef.current) fileRef.current.value = ''; }}>×</button>
           </div>
         )}
-        <input ref={fileRef} type="file" accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.json,.csv" hidden onChange={pickFile} />
+        <input ref={fileRef} type="file" accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.json" hidden onChange={pickFile} />
         <button type="button" className="attach-btn" title="Adjuntar archivo o imagen" onClick={() => fileRef.current?.click()}>📎</button>
         <input placeholder="Escribe un mensaje..." value={draft} onChange={(e) => handleTyping(e.target.value)} />
         <button type="submit" disabled={!draft.trim() && !imagePreview && !filePreview}>➤</button>

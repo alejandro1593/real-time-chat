@@ -114,6 +114,26 @@ body {
 }
 .icon-btn:hover { color: var(--danger); }
 
+.logout-btn {
+  display: flex; align-items: center; gap: .35rem;
+  background: var(--bg-2);
+  border: 1px solid var(--bg-3);
+  color: var(--muted);
+  font-size: .8rem; font-weight: 600;
+  padding: .45rem .7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all .15s ease;
+}
+.logout-btn:hover {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, .45);
+  background: rgba(255, 107, 107, .12);
+  box-shadow: 0 0 14px rgba(255, 107, 107, .15);
+}
+
 .search-box { padding: .8rem 1rem .4rem; position: relative; }
 .search-box input {
   width: 100%;
@@ -331,4 +351,6 @@ body {
   .conversation-preview { display: none; }
   .sidebar-account strong { font-size: .7rem; }
   .msg-bubble { max-width: 85%; }
+  .logout-btn span:not([aria-hidden]) { display: none; }
+  .logout-btn { padding: .45rem; gap: 0; }
 }

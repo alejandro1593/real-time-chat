@@ -52,7 +52,9 @@ export default function Sidebar({ user, conversations, activeId, onSelect, onDir
             <strong>{user.username}</strong>
             <span>en línea</span>
           </div>
-          <button className="icon-btn" onClick={onLogout} title="Cerrar sesión">⏻</button>
+          <button className="logout-btn" onClick={onLogout} title="Cerrar sesión">
+            <span aria-hidden="true">⏻</span> Salir
+          </button>
         </div>
       </div>
 

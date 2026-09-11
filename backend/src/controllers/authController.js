@@ -1,5 +1,6 @@
 const { User } = require('../models');
 const { signToken } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 async function register(req, res, next) {
   try {
@@ -10,7 +11,7 @@ async function register(req, res, next) {
     if (password.length < 6) {
       return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
     }
-    const existing = await User.findOne({ where: { $or: [{ username }, { email }] } });
+    const existing = await User.findOne({ where: { [Op.or]: [{ username }, { email }] } });
     if (existing) {
       return res.status(409).json({ message: 'El usuario o correo ya existe' });
     }

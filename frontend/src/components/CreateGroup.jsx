@@ -5,6 +5,7 @@ const initialUserIds = [];
 export default function CreateGroup({ onCancel, onCreate, existingUsers }) {
   const [name, setName] = useState('');
   const [selected, setSelected] = useState(initialUserIds);
+  const [attempted, setAttempted] = useState(false);
 
   function toggle(userId) {
     setSelected((s) =>
@@ -14,9 +15,21 @@ export default function CreateGroup({ onCancel, onCreate, existingUsers }) {
 
   function submit(e) {
     e.preventDefault();
-    if (!name.trim() || selected.length === 0) return;
+    if (!name.trim() || selected.length === 0) {
+      setAttempted(true);
+      return;
+    }
     onCreate(name.trim(), selected);
   }
+
+  const hint =
+    !name.trim() && !selected.length
+      ? 'Escribe un nombre y selecciona al menos un miembro.'
+      : !name.trim()
+        ? 'Escribe un nombre para el grupo.'
+        : selected.length === 0
+          ? 'Selecciona al menos un miembro.'
+          : null;
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -45,8 +58,9 @@ export default function CreateGroup({ onCancel, onCreate, existingUsers }) {
           </div>
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onCancel}>Cancelar</button>
-            <button type="submit" disabled={!name.trim() || selected.length === 0}>Crear</button>
+            <button type="submit">Crear</button>
           </div>
+          {attempted && hint && <p className="form-hint">⚠ {hint}</p>}
         </form>
       </div>
     </div>

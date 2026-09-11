@@ -19,14 +19,32 @@ async function list(req, res, next) {
         { model: User, as: 'participants', attributes: { exclude: ['passwordHash'] } }
       ]
     });
+
+    const ids = conversations.map((c) => c.id);
+    const allMsgs = ids.length
+      ? await Message.findAll({
+          where: { conversationId: { [Op.in]: ids }, deleted: false, userId: { [Op.ne]: req.user.id } },
+          attributes: ['conversationId', 'readBy']
+        })
+      : [];
+    const unreadMap = {};
+    allMsgs.forEach((m) => {
+      const r = Array.isArray(m.readBy) ? m.readBy : [];
+      if (!r.includes(req.user.id)) {
+        unreadMap[m.conversationId] = (unreadMap[m.conversationId] || 0) + 1;
+      }
+    });
+
     const result = conversations
       .map((c) => ({
         id: c.id,
         type: c.type,
         name: c.name,
+        ownerId: c.ownerId,
         createdAt: c.createdAt,
         lastMessage: c.messages[0] || null,
-        participants: c.participants.map(safeUser)
+        participants: c.participants.map(safeUser),
+        unreadCount: unreadMap[c.id] || 0
       }))
       .sort((a, b) => (b.lastMessage ? b.lastMessage.createdAt : 0) - (a.lastMessage ? a.lastMessage.createdAt : 0));
     res.json(result);
@@ -44,8 +62,13 @@ async function getOrCreateDirect(req, res, next) {
     const other = await User.findByPk(otherUserId);
     if (!other) return res.status(404).json({ message: 'Usuario no encontrado' });
 
-    const mine = await req.user.getConversations({ where: { type: 'direct' } });
-    const existing = mine.find((c) => c.participants && c.participants.some((p) => p.id === otherUserId));
+    const mine = await req.user.getConversations({
+      where: { type: 'direct' },
+      include: [{ model: User, as: 'participants', attributes: ['id'] }]
+    });
+    const existing = mine.find((c) =>
+      c.participants.some((p) => p.id === otherUserId)
+    );
     if (existing) return res.json(existing);
 
     const conversation = await sequelize.transaction(async (t) => {
@@ -79,7 +102,7 @@ async function createGroup(req, res, next) {
     const memberIds = [...new Set([req.user.id, ...userIds])];
 
     const conversation = await sequelize.transaction(async (t) => {
-      const conv = await Conversation.create({ type: 'group', name }, { transaction: t });
+      const conv = await Conversation.create({ type: 'group', name, ownerId: req.user.id }, { transaction: t });
       await ConversationParticipant.bulkCreate(
         memberIds.map((userId) => ({ conversationId: conv.id, userId })),
         { transaction: t }
@@ -105,10 +128,13 @@ async function getMessages(req, res, next) {
     if (!isMember) return res.status(403).json({ message: 'No eres miembro de esta conversación' });
 
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
-    const before = req.query.before || undefined;
+    const before = req.query.before;
 
-    const where = { conversationId };
-    if (before) where.createdAt = { [Op.lt]: new Date(before) };
+    const where = { conversationId, deleted: false };
+    if (before) {
+      const cursor = await Message.findByPk(before);
+      if (cursor) where.createdAt = { [Op.lt]: cursor.createdAt };
+    }
 
     const messages = await Message.findAll({
       where,
@@ -125,8 +151,8 @@ async function getMessages(req, res, next) {
 async function sendMessage(req, res, next) {
   try {
     const conversationId = req.params.id;
-    const { content } = req.body;
-    if (!content || !content.trim()) {
+    const { content, image } = req.body;
+    if ((!content || !content.trim()) && !image) {
       return res.status(400).json({ message: 'El mensaje no puede estar vacío' });
     }
     const isMember = await ConversationParticipant.findOne({
@@ -137,13 +163,22 @@ async function sendMessage(req, res, next) {
     const message = await Message.create({
       conversationId,
       userId: req.user.id,
-      content: content.trim()
-    });
-    const full = await Message.findByPk(message.id, {
-      include: [{ model: User, as: 'sender', attributes: { exclude: ['passwordHash'] } }]
+      content: (content || '').trim(),
+      image: image || null,
+      readBy: []
     });
 
-    const result = { ...full.toJSON(), sender: safeUser(full.sender) };
+    const result = {
+      id: message.id,
+      conversationId,
+      content: message.content,
+      image: message.image,
+      edited: message.edited,
+      deleted: message.deleted,
+      readBy: message.readBy,
+      createdAt: message.createdAt,
+      sender: safeUser(req.user)
+    };
 
     const conversation = await Conversation.findByPk(conversationId, {
       include: [{ model: User, as: 'participants', attributes: ['id'] }]
@@ -160,4 +195,143 @@ async function sendMessage(req, res, next) {
   }
 }
 
-module.exports = { list, getOrCreateDirect, createGroup, getMessages, sendMessage };
+async function editMessage(req, res, next) {
+  try {
+    const { msgId } = req.params;
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ message: 'Contenido obligatorio' });
+    const msg = await Message.findByPk(msgId);
+    if (!msg) return res.status(404).json({ message: 'Mensaje no encontrado' });
+    if (msg.userId !== req.user.id) return res.status(403).json({ message: 'Solo puedes editar tus mensajes' });
+    await msg.update({ content: content.trim(), edited: true });
+    const result = { ...msg.toJSON(), sender: safeUser(req.user) };
+    const io = req.app.get('io');
+    if (io) {
+      const conv = await Conversation.findByPk(msg.conversationId, { include: [{ model: User, as: 'participants', attributes: ['id'] }] });
+      for (const p of conv.participants) {
+        io.to(`user:${p.id}`).emit('message:update', result);
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteMessage(req, res, next) {
+  try {
+    const { msgId } = req.params;
+    const msg = await Message.findByPk(msgId);
+    if (!msg) return res.status(404).json({ message: 'Mensaje no encontrado' });
+    if (msg.userId !== req.user.id) return res.status(403).json({ message: 'Solo puedes borrar tus mensajes' });
+    await msg.update({ deleted: true, deletedAt: new Date(), content: '', image: null, edited: false });
+    const result = { ...msg.toJSON(), sender: safeUser(req.user) };
+    const io = req.app.get('io');
+    if (io) {
+      const conv = await Conversation.findByPk(msg.conversationId, { include: [{ model: User, as: 'participants', attributes: ['id'] }] });
+      for (const p of conv.participants) {
+        io.to(`user:${p.id}`).emit('message:delete', { id: msg.id, conversationId: msg.conversationId });
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function searchMessages(req, res, next) {
+  try {
+    const { id } = req.params;
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const isMember = await ConversationParticipant.findOne({ where: { conversationId: id, userId: req.user.id } });
+    if (!isMember) return res.status(403).json({ message: 'No eres miembro' });
+    const messages = await Message.findAll({
+      where: { conversationId: id, deleted: false, content: { [Op.iLike]: `%${q}%` } },
+      order: [['createdAt', 'DESC']],
+      limit: 50,
+      include: [{ model: User, as: 'sender', attributes: { exclude: ['passwordHash'] } }]
+    });
+    res.json(messages.reverse().map((m) => ({ ...m.toJSON(), sender: safeUser(m.sender) })));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function markRead(req, res, next) {
+  try {
+    const { id } = req.params;
+    const isMember = await ConversationParticipant.findOne({ where: { conversationId: id, userId: req.user.id } });
+    if (!isMember) return res.status(403).json({ message: 'No eres miembro' });
+    const unread = await Message.findAll({
+      where: { conversationId: id, userId: { [Op.ne]: req.user.id }, deleted: false }
+    });
+    await Promise.all(
+      unread.map(async (m) => {
+        const arr = Array.isArray(m.readBy) ? m.readBy : [];
+        if (!arr.includes(req.user.id)) {
+          await m.update({ readBy: [...arr, req.user.id] });
+        }
+      })
+    );
+    const io = req.app.get('io');
+    if (io) {
+      const conv = await Conversation.findByPk(id, { include: [{ model: User, as: 'participants', attributes: ['id'] }] });
+      for (const p of conv.participants) {
+        if (p.id !== req.user.id) {
+          io.to(`user:${p.id}`).emit('messages:read', {
+            conversationId: id,
+            userId: req.user.id,
+            username: req.user.username
+          });
+        }
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getMembers(req, res, next) {
+  try {
+    const { id } = req.params;
+    const conv = await Conversation.findByPk(id, {
+      include: [{ model: User, as: 'participants', attributes: { exclude: ['passwordHash'] } }]
+    });
+    if (!conv) return res.status(404).json({ message: 'Conversación no encontrada' });
+    res.json({ participants: conv.participants, ownerId: conv.ownerId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function leaveGroup(req, res, next) {
+  try {
+    const { id } = req.params;
+    const conv = await Conversation.findByPk(id, {
+      include: [{ model: User, as: 'participants', attributes: ['id'] }]
+    });
+    if (!conv || conv.type !== 'group') return res.status(400).json({ message: 'No es un grupo' });
+    if (!conv.participants.some((p) => p.id === req.user.id)) {
+      return res.status(403).json({ message: 'No eres miembro' });
+    }
+    await ConversationParticipant.destroy({ where: { conversationId: id, userId: req.user.id } });
+    const io = req.app.get('io');
+    if (io) {
+      const updated = await Conversation.findByPk(id, { include: [{ model: User, as: 'participants', attributes: { exclude: ['passwordHash'] } }] });
+      for (const p of updated.participants) {
+        io.to(`user:${p.id}`).emit('members:update', { conversationId: id, participants: updated.participants.map(safeUser) });
+      }
+      io.to(`user:${req.user.id}`).emit('conversation:removed', { conversationId: id });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  list, getOrCreateDirect, createGroup, getMessages, sendMessage,
+  editMessage, deleteMessage, searchMessages, markRead, getMembers, leaveGroup
+};

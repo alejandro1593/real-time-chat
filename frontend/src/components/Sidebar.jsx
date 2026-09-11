@@ -10,7 +10,11 @@ function conversationName(conv, currentUser) {
 
 function lastPreview(msg) {
   if (!msg) return 'Sin mensajes todavía';
-  return `${msg.sender?.username}: ${msg.content}`;
+  const who = msg.sender?.username ? `${msg.sender.username}: ` : '';
+  if (msg.deleted) return `${who}🗑 Mensaje eliminado`;
+  if (msg.image && !msg.content) return `${who}📷 Imagen`;
+  if (msg.image && msg.content) return `${who}📷 ${msg.content}`;
+  return `${who}${msg.content}`;
 }
 
 export default function Sidebar({ user, conversations, activeId, mobileHidden, onSelect, onDirect, onGroup, onLogout }) {
@@ -104,6 +108,7 @@ export default function Sidebar({ user, conversations, activeId, mobileHidden, o
                 <strong>{conversationName(c, user)}</strong>
                 <span className="conversation-preview">{lastPreview(c.lastMessage)}</span>
               </div>
+              {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
             </button>
           );
         })}

@@ -3,7 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./app');
 const setupSocket = require('./sockets');
-const { sequelize, User, Conversation, Message, ConversationParticipant } = require('./models');
+const migrate = require('./migrate');
+const { sequelize } = require('./models');
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -17,6 +18,7 @@ const PORT = process.env.PORT || 5000;
 (async () => {
   try {
     await sequelize.authenticate();
+    await migrate();
     await sequelize.sync();
     console.log('Base de datos conectada y sincronizada');
     server.listen(PORT, () => console.log(`API REST + Socket.io en el puerto ${PORT}`));

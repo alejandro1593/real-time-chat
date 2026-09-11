@@ -24,6 +24,13 @@ export const api = {
   conversations: () => request('GET', '/conversations'),
   startDirect: (userId) => request('POST', '/conversations/direct', { userId }),
   createGroup: (d) => request('POST', '/conversations/group', d),
-  messages: (id, before) =>
-    request('GET', `/conversations/${id}/messages${before ? `?before=${before}` : ''}`)
+  messages: (id, before, limit = 50) =>
+    request('GET', `/conversations/${id}/messages${!before ? '' : `?before=${before}`}${before ? `&limit=${limit}` : `?limit=${limit}`}`),
+  searchMessages: (id, q) => request('GET', `/conversations/${id}/messages/search?q=${encodeURIComponent(q)}`),
+  sendMessage: (id, d) => request('POST', `/conversations/${id}/messages`, d),
+  editMessage: (id, msgId, content) => request('PUT', `/conversations/${id}/messages/${msgId}`, { content }),
+  deleteMessage: (id, msgId) => request('DELETE', `/conversations/${id}/messages/${msgId}`),
+  markRead: (id) => request('POST', `/conversations/${id}/read`),
+  members: (id) => request('GET', `/conversations/${id}/members`),
+  leaveGroup: (id) => request('DELETE', `/conversations/${id}/participants/me`)
 };

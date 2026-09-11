@@ -26,8 +26,8 @@ module.exports = function setupSocket(io) {
 
     socket.on('message:send', async (payload, callback) => {
       try {
-        const { conversationId, content } = payload || {};
-        if (!conversationId || !content || !content.trim()) {
+        const { conversationId, content, image } = payload || {};
+        if (!conversationId || ((!content || !content.trim()) && !image)) {
           return callback && callback({ ok: false, message: 'Datos inválidos' });
         }
         const isMember = await ConversationParticipant.findOne({
@@ -39,16 +39,19 @@ module.exports = function setupSocket(io) {
         const message = await Message.create({
           conversationId,
           userId,
-          content: content.trim()
-        });
-        const full = await Message.findByPk(message.id, {
-          include: [{ model: User, as: 'sender', attributes: { exclude: ['passwordHash'] } }]
+          content: (content || '').trim(),
+          image: image || null,
+          readBy: []
         });
         const result = {
-          id: full.id,
-          conversationId: full.conversationId,
-          content: full.content,
-          createdAt: full.createdAt,
+          id: message.id,
+          conversationId: message.conversationId,
+          content: message.content,
+          image: message.image,
+          edited: message.edited,
+          deleted: message.deleted,
+          readBy: message.readBy,
+          createdAt: message.createdAt,
           sender: { id: user.id, username: user.username, email: user.email, online: user.online }
         };
         const conversation = await Conversation.findByPk(conversationId, {

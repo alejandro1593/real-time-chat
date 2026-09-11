@@ -66,7 +66,15 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
   const [draft, setDraft] = useState(m.content || '');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  const [pickerUp, setPickerUp] = useState(true);
   const wrapperRef = useRef(null);
+
+  const openPicker = () => {
+    setShowReactions(true);
+    requestAnimationFrame(() => {
+      if (wrapperRef.current) setPickerUp(wrapperRef.current.getBoundingClientRect().top > 96);
+    });
+  };
 
   useEffect(() => {
     if (!showReactions) return;
@@ -104,7 +112,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
   return (
     <div key={m.id} ref={wrapperRef} className={`msg ${mine ? 'mine' : ''} ${fresh ? 'new-arrival' : ''}`}>
       {!mine && <div className="avatar avatar-tiny" style={avatarStyle(m.sender)}>{m.sender?.username[0]?.toUpperCase()}</div>}
-      <div className="msg-bubble" onDoubleClick={() => setShowReactions(true)}>
+      <div className="msg-bubble" onDoubleClick={openPicker}>
         {m.replyTo && (
           <div className="reply-quote">
             <span className="rq-author">{m.replyTo.sender || ''}</span>
@@ -126,7 +134,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
           <span className="msg-actions">
             {!confirmDelete ? (
               <>
-                <button type="button" title="Reacciones" onClick={() => setShowReactions(!showReactions)}>😀</button>
+                <button type="button" title="Reacciones" onClick={() => (showReactions ? setShowReactions(false) : openPicker())}>😀</button>
                 <button type="button" title="Editar" onClick={() => setEditing(true)}>✎</button>
                 <button type="button" title="Eliminar" onClick={() => setConfirmDelete(true)}>🗑</button>
               </>
@@ -139,7 +147,7 @@ function Bubble({ m, mine, currentUser, fresh, onEdit, onDelete, onReact, onRepl
           </span>
         )}
         {showReactions && (
-          <div className="reaction-picker">
+          <div className={`reaction-picker ${pickerUp ? '' : 'below'}`}>
             {REACTION_EMOJIS.map((emoji) => (
               <button key={emoji} type="button" onClick={() => { onReact(m.id, emoji); setShowReactions(false); }}>{emoji}</button>
             ))}

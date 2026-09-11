@@ -634,6 +634,10 @@ body {
   box-shadow: 0 10px 30px rgba(0,0,0,.45);
   z-index: 12;
 }
+.reaction-picker.below {
+  bottom: auto;
+  top: calc(100% + .3rem);
+}
 .reaction-picker button {
   background: none; border: none;
   font-size: 1.1rem;

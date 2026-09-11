@@ -353,11 +353,37 @@ body {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
 
+.back-btn {
+  display: none;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: .3rem .45rem;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.back-btn:hover { background: var(--bg-3); }
+
 @media (max-width: 640px) {
-  .sidebar { width: 90px; min-width: 90px; }
-  .sidebar-account .account-info,
-  .conversation-preview { display: none; }
-  .sidebar-account strong { font-size: .7rem; }
+  .chat-app { position: relative; }
+  .sidebar {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-width: 0;
+    z-index: 3;
+  }
+  .sidebar.hide-mobile { display: none; }
+  .chat-window {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+  }
+  .chat-window.empty { display: none; }
+  .back-btn { display: inline-flex; }
   .msg-bubble { max-width: 85%; }
   .logout-btn span:not([aria-hidden]) { display: none; }
   .logout-btn { padding: .45rem; gap: 0; }

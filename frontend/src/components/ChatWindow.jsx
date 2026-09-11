@@ -18,7 +18,7 @@ function windowStatus(conv, currentUser, typing) {
   return other?.online ? 'en línea' : 'desconectado';
 }
 
-export default function ChatWindow({ conversation, messages, typing, currentUser, onSend, onTyping }) {
+export default function ChatWindow({ conversation, messages, typing, currentUser, onBack, onSend, onTyping }) {
   const [draft, setDraft] = useState('');
   const [typingFlag, setTypingFlag] = useState(false);
   const endRef = useRef(null);
@@ -69,6 +69,7 @@ export default function ChatWindow({ conversation, messages, typing, currentUser
   return (
     <div className="chat-window">
       <header className="chat-header">
+        <button type="button" className="back-btn" onClick={onBack} aria-label="Volver a la lista">←</button>
         <div className="header-avatar">{title[0]?.toUpperCase()}</div>
         <div>
           <h3>{title}</h3>

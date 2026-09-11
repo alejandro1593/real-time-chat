@@ -104,6 +104,7 @@ export default function ChatApp() {
         user={user}
         conversations={conversations}
         activeId={activeId}
+        mobileHidden={!!activeId}
         onSelect={openConversation}
         onDirect={openDirect}
         onGroup={openGroup}
@@ -114,6 +115,11 @@ export default function ChatApp() {
         messages={messages}
         typing={typing[activeId]}
         currentUser={user}
+        onBack={() => {
+          setActiveId(null);
+          setMessages([]);
+          setTyping({});
+        }}
         onSend={async (content) => {
           socket.emit('message:send', { conversationId: activeId, content }, () => {});
           socket.emit('typing', { conversationId: activeId, typing: false });

@@ -13,7 +13,7 @@ function lastPreview(msg) {
   return `${msg.sender?.username}: ${msg.content}`;
 }
 
-export default function Sidebar({ user, conversations, activeId, onSelect, onDirect, onGroup, onLogout }) {
+export default function Sidebar({ user, conversations, activeId, mobileHidden, onSelect, onDirect, onGroup, onLogout }) {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -43,7 +43,7 @@ export default function Sidebar({ user, conversations, activeId, onSelect, onDir
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${mobileHidden ? 'hide-mobile' : ''}`}>
       <div className="sidebar-header">
         <h2>💬 Chats</h2>
         <div className="sidebar-account">

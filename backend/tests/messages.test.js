@@ -162,4 +162,57 @@ describe('Mensajes', () => {
       .send({ content: 'colado' });
     expect(res.status).toBe(403);
   });
+
+  test('respuesta a un mensaje incluye el replyTo', async () => {
+    const original = await request(app)
+      .post(`/api/conversations/${conv.id}/messages`)
+      .set('Authorization', auth(alice))
+      .send({ content: 'mensaje base' });
+    const reply = await request(app)
+      .post(`/api/conversations/${conv.id}/messages`)
+      .set('Authorization', auth(alice))
+      .send({ content: 'mi respuesta', replyToId: original.body.id });
+    expect(reply.status).toBe(201);
+    expect(reply.body.replyTo).toBeTruthy();
+    expect(reply.body.replyTo.content).toBe('mensaje base');
+  });
+
+  test('adjuntar un archivo lo devuelve en el mensaje', async () => {
+    const res = await request(app)
+      .post(`/api/conversations/${conv.id}/messages`)
+      .set('Authorization', auth(alice))
+      .send({ content: 'documento', file: { name: 'apuntes.pdf', size: 1024, mime: 'application/pdf', dataUrl: 'data:application/pdf;base64,AAAA' } });
+    expect(res.status).toBe(201);
+    expect(res.body.file).toBeTruthy();
+    expect(res.body.file.name).toBe('apuntes.pdf');
+  });
+
+  test('reaccionar a un mensaje la añade', async () => {
+    const sent = await request(app)
+      .post(`/api/conversations/${conv.id}/messages`)
+      .set('Authorization', auth(alice))
+      .send({ content: 'dame cora' });
+    const react = await request(app)
+      .put(`/api/conversations/${conv.id}/messages/${sent.body.id}/reactions`)
+      .set('Authorization', auth(alice))
+      .send({ emoji: '❤️' });
+    expect(react.status).toBe(200);
+    expect(react.body.reactions['❤️']).toContain(alice.id);
+  });
+
+  test('quitar reacción la elimina', async () => {
+    const sent = await request(app)
+      .post(`/api/conversations/${conv.id}/messages`)
+      .set('Authorization', auth(alice))
+      .send({ content: 'reaccion dos veces' });
+    await request(app)
+      .put(`/api/conversations/${conv.id}/messages/${sent.body.id}/reactions`)
+      .set('Authorization', auth(alice))
+      .send({ emoji: '👍' });
+    const off = await request(app)
+      .put(`/api/conversations/${conv.id}/messages/${sent.body.id}/reactions`)
+      .set('Authorization', auth(alice))
+      .send({ emoji: '👍' });
+    expect(off.body.reactions['👍'] || []).not.toContain(alice.id);
+  });
 });

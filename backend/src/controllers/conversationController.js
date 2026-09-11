@@ -92,6 +92,19 @@ async function getOrCreateDirect(req, res, next) {
   }
 }
 
+async function buildReplySnapshot(conversationId, replyToId, currentUserId) {
+  if (!replyToId) return null;
+  const original = await Message.findOne({ where: { id: replyToId, conversationId } });
+  if (!original || original.deleted) return null;
+  return {
+    id: original.id,
+    content: original.content || '',
+    image: original.image || null,
+    file: original.file || null,
+    sender: original.userId === currentUserId ? 'tú' : null
+  };
+}
+
 async function createGroup(req, res, next) {
   try {
     const { name, userIds } = req.body;
@@ -151,8 +164,9 @@ async function getMessages(req, res, next) {
 async function sendMessage(req, res, next) {
   try {
     const conversationId = req.params.id;
-    const { content, image } = req.body;
-    if ((!content || !content.trim()) && !image) {
+    const { content, image, file, replyToId } = req.body;
+    const hasMedia = image || (Array.isArray(file) ? file.length > 0 : file);
+    if ((!content || !content.trim()) && !hasMedia) {
       return res.status(400).json({ message: 'El mensaje no puede estar vacío' });
     }
     const isMember = await ConversationParticipant.findOne({
@@ -160,11 +174,16 @@ async function sendMessage(req, res, next) {
     });
     if (!isMember) return res.status(403).json({ message: 'No eres miembro de esta conversación' });
 
+    const replyTo = await buildReplySnapshot(conversationId, replyToId, req.user.id);
+
     const message = await Message.create({
       conversationId,
       userId: req.user.id,
       content: (content || '').trim(),
       image: image || null,
+      file: file || null,
+      replyTo,
+      reactions: {},
       readBy: []
     });
 
@@ -173,6 +192,9 @@ async function sendMessage(req, res, next) {
       conversationId,
       content: message.content,
       image: message.image,
+      file: message.file,
+      replyTo: message.replyTo,
+      reactions: message.reactions,
       edited: message.edited,
       deleted: message.deleted,
       readBy: message.readBy,
@@ -190,6 +212,88 @@ async function sendMessage(req, res, next) {
       }
     }
     res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleReaction(req, res, next) {
+  try {
+    const { id, msgId } = req.params;
+    const { emoji } = req.body;
+    if (!emoji) return res.status(400).json({ message: 'Emoji obligatorio' });
+    const isMember = await ConversationParticipant.findOne({ where: { conversationId: id, userId: req.user.id } });
+    if (!isMember) return res.status(403).json({ message: 'No eres miembro' });
+    const msg = await Message.findByPk(msgId);
+    if (!msg || msg.deleted) return res.status(404).json({ message: 'Mensaje no encontrado' });
+
+    const reactions = { ...(msg.reactions || {}) };
+    const users = [...(Array.isArray(reactions[emoji]) ? reactions[emoji] : [])];
+    const idx = users.indexOf(req.user.id);
+    if (idx >= 0) {
+      users.splice(idx, 1);
+    } else {
+      users.push(req.user.id);
+    }
+    if (users.length === 0) delete reactions[emoji];
+    else reactions[emoji] = users;
+    await msg.update({ reactions });
+
+    const result = { ...msg.toJSON(), sender: safeUser(msg.sender || req.user) };
+    const io = req.app.get('io');
+    if (io) {
+      const conv = await Conversation.findByPk(id, { include: [{ model: User, as: 'participants', attributes: ['id'] }] });
+      for (const p of conv.participants) {
+        io.to(`user:${p.id}`).emit('message:update', result);
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function renameGroup(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Nombre obligatorio' });
+    const conv = await Conversation.findByPk(id);
+    if (!conv || conv.type !== 'group') return res.status(400).json({ message: 'No es un grupo' });
+    if (conv.ownerId !== req.user.id) return res.status(403).json({ message: 'Solo el creador puede renombrar el grupo' });
+    await conv.update({ name: name.trim().slice(0, 80) });
+    const io = req.app.get('io');
+    if (io) {
+      const updated = await Conversation.findByPk(id, { include: [{ model: User, as: 'participants', attributes: { exclude: ['passwordHash'] } }] });
+      for (const p of updated.participants) {
+        io.to(`user:${p.id}`).emit('conversation:update', updated.toJSON());
+      }
+    }
+    res.json(conv);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteGroup(req, res, next) {
+  try {
+    const { id } = req.params;
+    const conv = await Conversation.findByPk(id);
+    if (!conv || conv.type !== 'group') return res.status(400).json({ message: 'No es un grupo' });
+    if (conv.ownerId !== req.user.id) return res.status(403).json({ message: 'Solo el creador puede eliminar el grupo' });
+    const participants = await conv.getParticipants({ attributes: ['id'] });
+    await sequelize.transaction(async (t) => {
+      await Message.destroy({ where: { conversationId: id }, transaction: t });
+      await ConversationParticipant.destroy({ where: { conversationId: id }, transaction: t });
+      await conv.destroy({ transaction: t });
+    });
+    const io = req.app.get('io');
+    if (io) {
+      for (const p of participants) {
+        io.to(`user:${p.id}`).emit('conversation:removed', { conversationId: id });
+      }
+    }
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -224,7 +328,7 @@ async function deleteMessage(req, res, next) {
     const msg = await Message.findByPk(msgId);
     if (!msg) return res.status(404).json({ message: 'Mensaje no encontrado' });
     if (msg.userId !== req.user.id) return res.status(403).json({ message: 'Solo puedes borrar tus mensajes' });
-    await msg.update({ deleted: true, deletedAt: new Date(), content: '', image: null, edited: false });
+    await msg.update({ deleted: true, deletedAt: new Date(), content: '', image: null, file: null, edited: false });
     const result = { ...msg.toJSON(), sender: safeUser(req.user) };
     const io = req.app.get('io');
     if (io) {
@@ -333,5 +437,6 @@ async function leaveGroup(req, res, next) {
 
 module.exports = {
   list, getOrCreateDirect, createGroup, getMessages, sendMessage,
-  editMessage, deleteMessage, searchMessages, markRead, getMembers, leaveGroup
+  editMessage, deleteMessage, searchMessages, markRead, getMembers, leaveGroup,
+  toggleReaction, renameGroup, deleteGroup
 };

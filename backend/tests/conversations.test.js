@@ -18,6 +18,61 @@ afterAll(async () => {
 
 const auth = (user) => `Bearer ${user.token}`;
 
+describe('Grupos: renombrar y eliminar', () => {
+  test('renombrar grupo como dueño', async () => {
+    const res = await request(app)
+      .post('/api/conversations/group')
+      .set('Authorization', auth(owner))
+      .send({ name: 'Nombre Viejo', userIds: [partner.id] });
+    const conv = res.body;
+    const ren = await request(app)
+      .put(`/api/conversations/${conv.id}`)
+      .set('Authorization', auth(owner))
+      .send({ name: 'Nombre Nuevo' });
+    expect(ren.status).toBe(200);
+    expect(ren.body.name).toBe('Nombre Nuevo');
+  });
+
+  test('no permite renombrar como miembro → 403', async () => {
+    const res = await request(app)
+      .post('/api/conversations/group')
+      .set('Authorization', auth(owner))
+      .send({ name: 'Grupo Privado', userIds: [partner.id] });
+    const ren = await request(app)
+      .put(`/api/conversations/${res.body.id}`)
+      .set('Authorization', auth(partner))
+      .send({ name: 'Hackeado' });
+    expect(ren.status).toBe(403);
+  });
+
+  test('dueño elimina el grupo y desaparece para los miembros', async () => {
+    const res = await request(app)
+      .post('/api/conversations/group')
+      .set('Authorization', auth(owner))
+      .send({ name: 'Grupo Efímero', userIds: [partner.id] });
+    const gid = res.body.id;
+    const del = await request(app)
+      .delete(`/api/conversations/${gid}`)
+      .set('Authorization', auth(owner));
+    expect(del.status).toBe(200);
+    const after = await request(app)
+      .get('/api/conversations')
+      .set('Authorization', auth(partner));
+    expect(after.body.some((c) => c.id === gid)).toBe(false);
+  });
+
+  test('miembro no puede eliminar grupo → 403', async () => {
+    const res = await request(app)
+      .post('/api/conversations/group')
+      .set('Authorization', auth(owner))
+      .send({ name: 'Intocable', userIds: [partner.id] });
+    const del = await request(app)
+      .delete(`/api/conversations/${res.body.id}`)
+      .set('Authorization', auth(partner));
+    expect(del.status).toBe(403);
+  });
+});
+
 describe('Conversaciones', () => {
   test('sin token en listado → 401', async () => {
     const res = await request(app).get('/api/conversations');

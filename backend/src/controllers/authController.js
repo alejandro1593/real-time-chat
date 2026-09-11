@@ -2,6 +2,8 @@ const { User } = require('../models');
 const { signToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 
+const AVATAR_COLORS = ['#22d3ee', '#a78bfa', '#34d399', '#f472b6', '#fb923c', '#facc15', '#60a5fa', '#f87171'];
+
 async function register(req, res, next) {
   try {
     const { username, email, password } = req.body;
@@ -15,7 +17,8 @@ async function register(req, res, next) {
     if (existing) {
       return res.status(409).json({ message: 'El usuario o correo ya existe' });
     }
-    const user = await User.create({ username, email, passwordHash: password });
+    const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+    const user = await User.create({ username, email, passwordHash: password, avatarColor: color });
     const token = signToken(user);
     res.status(201).json({ user: user.toSafe(), token });
   } catch (err) {

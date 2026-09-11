@@ -26,8 +26,9 @@ module.exports = function setupSocket(io) {
 
     socket.on('message:send', async (payload, callback) => {
       try {
-        const { conversationId, content, image } = payload || {};
-        if (!conversationId || ((!content || !content.trim()) && !image)) {
+        const { conversationId, content, image, file } = payload || {};
+        const hasMedia = image || file;
+        if (!conversationId || ((!content || !content.trim()) && !hasMedia)) {
           return callback && callback({ ok: false, message: 'Datos inválidos' });
         }
         const isMember = await ConversationParticipant.findOne({
@@ -41,6 +42,8 @@ module.exports = function setupSocket(io) {
           userId,
           content: (content || '').trim(),
           image: image || null,
+          file: file || null,
+          reactions: {},
           readBy: []
         });
         const result = {
@@ -48,6 +51,8 @@ module.exports = function setupSocket(io) {
           conversationId: message.conversationId,
           content: message.content,
           image: message.image,
+          file: message.file,
+          reactions: message.reactions,
           edited: message.edited,
           deleted: message.deleted,
           readBy: message.readBy,

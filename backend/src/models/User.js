@@ -10,7 +10,9 @@ const User = sequelize.define(
     email: { type: DataTypes.STRING, allowNull: false, unique: true, validate: { isEmail: true } },
     passwordHash: { type: DataTypes.STRING, allowNull: false },
     online: { type: DataTypes.BOOLEAN, defaultValue: false },
-    lastSeen: { type: DataTypes.DATE }
+    lastSeen: { type: DataTypes.DATE },
+    avatarColor: { type: DataTypes.STRING(20) },
+    avatar: { type: DataTypes.TEXT }
   },
   {
     tableName: 'users',

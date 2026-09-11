@@ -30,7 +30,10 @@ export const api = {
   sendMessage: (id, d) => request('POST', `/conversations/${id}/messages`, d),
   editMessage: (id, msgId, content) => request('PUT', `/conversations/${id}/messages/${msgId}`, { content }),
   deleteMessage: (id, msgId) => request('DELETE', `/conversations/${id}/messages/${msgId}`),
+  reactToMessage: (id, msgId, emoji) => request('PUT', `/conversations/${id}/messages/${msgId}/reactions`, { emoji }),
   markRead: (id) => request('POST', `/conversations/${id}/read`),
   members: (id) => request('GET', `/conversations/${id}/members`),
-  leaveGroup: (id) => request('DELETE', `/conversations/${id}/participants/me`)
+  leaveGroup: (id) => request('DELETE', `/conversations/${id}/participants/me`),
+  renameGroup: (id, name) => request('PUT', `/conversations/${id}`, { name }),
+  deleteGroup: (id) => request('DELETE', `/conversations/${id}`)
 };

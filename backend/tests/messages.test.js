@@ -187,17 +187,18 @@ describe('Mensajes', () => {
     expect(res.body.file.name).toBe('apuntes.pdf');
   });
 
-  test('reaccionar a un mensaje la añade', async () => {
+  test('reaccionar a un mensaje la añade y conserva al autor original', async () => {
     const sent = await request(app)
       .post(`/api/conversations/${conv.id}/messages`)
       .set('Authorization', auth(alice))
       .send({ content: 'dame cora' });
     const react = await request(app)
       .put(`/api/conversations/${conv.id}/messages/${sent.body.id}/reactions`)
-      .set('Authorization', auth(alice))
+      .set('Authorization', auth(bob))
       .send({ emoji: '❤️' });
     expect(react.status).toBe(200);
-    expect(react.body.reactions['❤️']).toContain(alice.id);
+    expect(react.body.reactions['❤️']).toContain(bob.id);
+    expect(react.body.sender.id).toBe(alice.id);
   });
 
   test('quitar reacción la elimina', async () => {

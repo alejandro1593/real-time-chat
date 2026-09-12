@@ -94,14 +94,17 @@ async function getOrCreateDirect(req, res, next) {
 
 async function buildReplySnapshot(conversationId, replyToId, currentUserId) {
   if (!replyToId) return null;
-  const original = await Message.findOne({ where: { id: replyToId, conversationId } });
+  const original = await Message.findOne({
+    where: { id: replyToId, conversationId },
+    include: [{ model: User, as: 'sender', attributes: ['username'] }]
+  });
   if (!original || original.deleted) return null;
   return {
     id: original.id,
     content: original.content || '',
     image: original.image || null,
     file: original.file || null,
-    sender: original.userId === currentUserId ? 'tú' : null
+    sender: original.userId === currentUserId ? 'tú' : (original.sender?.username || null)
   };
 }
 
@@ -239,7 +242,7 @@ async function toggleReaction(req, res, next) {
     else reactions[emoji] = users;
     await msg.update({ reactions });
 
-    const result = { ...msg.toJSON(), sender: safeUser(msg.sender || req.user) };
+    const result = { ...msg.toJSON(), sender: safeUser(await msg.getSender()) };
     const io = req.app.get('io');
     if (io) {
       const conv = await Conversation.findByPk(id, { include: [{ model: User, as: 'participants', attributes: ['id'] }] });

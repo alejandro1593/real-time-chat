@@ -226,14 +226,50 @@ export default function ChatWindow({
   const [searching, setSearching] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  const endRef = useRef(null);
+  const containerRef = useRef(null);
   const typingTimer = useRef(null);
   const fileRef = useRef(null);
+  const lenRef = useRef(0);
+  const stickRef = useRef(true);
+  const prevScrollRef = useRef({ height: 0, top: 0 });
 
   const title = windowTitle(conversation, currentUser);
   const status = windowStatus(conversation, currentUser, typing);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, typing]);
+  useEffect(() => { stickRef.current = true; }, [conversation?.id]);
+
+  function onListScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  }
+
+  function loadOlderMessages() {
+    const el = containerRef.current;
+    if (el) { prevScrollRef.current = { height: el.scrollHeight, top: el.scrollTop }; }
+    onLoadOlder();
+  }
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const prevLen = lenRef.current;
+    lenRef.current = messages.length;
+    if (!prevLen && messages.length) { el.scrollTop = el.scrollHeight; return; }
+    if (messages.length > prevLen && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !prevScrollRef.current.height) return;
+    el.scrollTop = prevScrollRef.current.top + (el.scrollHeight - prevScrollRef.current.height);
+    prevScrollRef.current = { height: 0, top: 0 };
+  }, [messages]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (el && typing && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [typing]);
 
   useEffect(() => {
     if (searchOpen && searchQ.trim()) {
@@ -317,12 +353,12 @@ export default function ChatWindow({
         </div>
       )}
 
-      <div className="messages">
+      <div className="messages" ref={containerRef} onScroll={onListScroll}>
         {!searchOpen ? (
           <>
             {hasMore && (
               <div className="load-older-wrap">
-                <button type="button" className="load-older" onClick={onLoadOlder} disabled={loadingOlder}>
+                <button type="button" className="load-older" onClick={loadOlderMessages} disabled={loadingOlder}>
                   {loadingOlder ? 'Cargando...' : 'Cargar mensajes anteriores ↑'}
                 </button>
               </div>
@@ -344,7 +380,6 @@ export default function ChatWindow({
           </>
         )}
         {typing && <div className="typing-indicator"><span></span><span></span><span></span></div>}
-        <div ref={endRef} />
       </div>
 
       {conversation.type === 'group' && showMembers && (
